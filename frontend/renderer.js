@@ -14,27 +14,21 @@ usernameInput.addEventListener("input", () =>
 );
 
 async function updateUI(version) {
-  const isInstalled = await window.electronAPI.checkInstalled(version);
+  const isInstalled = await eel.check_installed(version)();
   btn.innerText = isInstalled ? "ГРАТИ" : "ВСТАНОВИТИ";
 }
 
-versionSelect.addEventListener("change", () => updateUI(versionSelect.value));
-
-window.electronAPI.onProgress((data) => {
-  progressBar.style.width = data.percent + "%";
-  status.innerText = data.task;
-  if (data.percent >= 100) {
-    status.innerText = "Гра запущена!";
-    btn.disabled = false;
-    updateUI(versionSelect.value);
-  }
-});
-
+eel.expose(log_update);
+function log_update(data) {
+  const logContainer = document.getElementById("log-container");
+  const logItem = document.createElement("div");
+  logItem.className = "log-item";
+  logItem.textContent = `> ${data.payload}`;
+  logItem.onclick = () => logItem.classList.toggle("expanded");
+  logContainer.prepend(logItem);
+}
 versionSelect.addEventListener("change", async () => {
-  const isInstalled = await window.electronAPI.checkInstalled(
-    versionSelect.value,
-  );
-  btn.innerText = isInstalled ? "ГРАТИ" : "ВСТАНОВИТИ";
+  updateUI(versionSelect.value);
   customRepoDiv.style.display =
     versionSelect.value === "custom" ? "block" : "none";
   if (versionSelect.value === "custom") modal.classList.remove("modal-hidden");
@@ -42,18 +36,18 @@ versionSelect.addEventListener("change", async () => {
 
 async function loadVersions() {
   try {
-    const versions = await window.electronAPI.getVersions();
+    const versions = await eel.get_versions()();
     versionSelect.innerHTML =
       '<option value="" disabled selected>Оберіть версію</option><option value="custom">GitHub збірка...</option>';
     for (const ver of versions) {
-      const isInstalled = await window.electronAPI.checkInstalled(ver);
+      const isInstalled = await eel.check_installed(ver)();
       const option = document.createElement("option");
       option.value = ver;
       option.textContent = isInstalled ? `✓ ${ver}` : ver;
       versionSelect.appendChild(option);
     }
   } catch (e) {
-    status.innerText = "Помилка";
+    status.innerText = "Помилка завантаження версій";
   }
 }
 
@@ -63,40 +57,28 @@ btn.addEventListener("click", async () => {
   const data = {
     version: versionSelect.value,
     username: usernameInput.value,
-    loader: document.querySelector('input[name="loader"]:checked').value,
-    repoUrl: document.getElementById("repo-url").value,
   };
-  await window.electronAPI.launchGame(data);
+  const result = await eel.launch_game(data)();
+  if (!result.success) status.innerText = "Помилка: " + result.error;
+  else status.innerText = "Гра запущена!";
 });
 
-window.electronAPI.onProgress((data) => {
+// Функції для зв'язку з Python
+eel.expose(progress_update);
+function progress_update(data) {
   progressBar.style.width = data.percent + "%";
-  status.innerText = data.task || "Завантаження...";
-});
+  status.innerText = data.task;
+  if (data.percent >= 100) btn.disabled = false;
+}
 
-window.electronAPI.onLog((data) => {
+eel.expose(log_update);
+function log_update(data) {
   const logItem = document.createElement("div");
   logItem.className = "log-item";
-  const payload = data.payload;
-  let text =
-    typeof payload === "object" ? JSON.stringify(payload, null, 2) : payload;
-  logItem.textContent = `> ${text}`;
-  logItem.addEventListener("click", () => logItem.classList.toggle("expanded"));
+  logItem.textContent = `> ${data.payload}`;
+  logItem.onclick = () => logItem.classList.toggle("expanded");
   logContainer.prepend(logItem);
-});
-
-window.electronAPI.onProgress((data) => {
-  const bar = document.getElementById("progress-bar");
-  const status = document.getElementById("status");
-
-  bar.style.width = data.percent + "%";
-  status.innerText = data.task;
-
-  if (data.percent >= 100) {
-    status.innerText = "Готово!";
-    document.getElementById("play-btn").disabled = false;
-  }
-});
+}
 
 document.getElementById("save-btn").addEventListener("click", () => {
   if (repoInput.value) {
