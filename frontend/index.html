@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Minecraft Launcher</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-layout">
+      <aside class="sidebar">
+        <h1>MINECRAFT</h1>
+        <label class="input-label">Нікнейм</label>
+        <input type="text" id="username" placeholder="Введіть нік..." />
+        <label class="input-label">Версія гри</label>
+        <div class="custom-select-wrapper">
+          <select id="version-select">
+            <option value="" disabled selected>Оберіть версію</option>
+          </select>
+        </div>
+        <label class="input-label">Завантажувач</label>
+        <div class="loader-container">
+          <input
+            type="radio"
+            id="vanilla"
+            name="loader"
+            value="vanilla"
+            checked
+          />
+          <label for="vanilla">Vanilla</label>
+          <input type="radio" id="fabric" name="loader" value="fabric" />
+          <label for="fabric">Fabric</label>
+          <input type="radio" id="forge" name="loader" value="forge" />
+          <label for="forge">Forge</label>
+          <div class="active-line"></div>
+        </div>
+        <div id="custom-repo" style="display: none">
+          <input type="text" id="repo-url" placeholder="GitHub URL" />
+        </div>
+      </aside>
+      <div id="modal-overlay" class="modal-hidden">
+        <div class="modal-box">
+          <h2>Вставте посилання</h2>
+          <input
+            type="text"
+            id="modal-repo-url"
+            placeholder="https://github.com/user/repo"
+          />
+          <div class="modal-buttons">
+            <button id="cancel-btn">Скасувати</button>
+            <button id="save-btn">Зберегти</button>
+          </div>
+        </div>
+      </div>
+      <main class="main-content">
+        <div id="log-container"></div>
+        <div class="hero-area">
+          <div id="progress-wrapper"><div id="progress-bar"></div></div>
+          <p id="status"></p>
+          <button id="play-btn">ГРАТИ</button>
+        </div>
+      </main>
+    </div>
+    <script src="renderer.js"></script>
+  </body>
+</html>
