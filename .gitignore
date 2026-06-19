@@ -4,4 +4,4 @@ minecraft_data/
 logs/
 config.json
 .pg-native/
-.sable/
+.sable/natives
