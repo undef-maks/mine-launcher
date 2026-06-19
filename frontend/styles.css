@@ -221,8 +221,9 @@ button:hover {
   margin: 0;
 }
 
-/* Модалка */
-#modal-overlay {
+/* Модалки (Об'єднано для створення профілю та налаштувань) */
+#modal-overlay,
+#settings-modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -263,4 +264,12 @@ button:hover {
   margin-top: -10px;
   margin-bottom: 15px;
   line-height: 1.4;
+}
+
+/* Сайдбар Футер (Кнопки вниз) */
+.sidebar-footer {
+  margin-top: auto;
+  display: flex;
+  gap: 10px;
+  width: 100%;
 }

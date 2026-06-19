@@ -17,20 +17,27 @@ if not os.path.exists(MINECRAFT_PATH):
 
 eel.init('frontend')
 
+@eel.expose
 def get_config():
     if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f:
+        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
             try:
-                return json.load(f)
+                config = json.load(f)
+                if "ram" not in config:
+                    config["ram"] = "4G"
+                if "selected_gpu" not in config:
+                    config["selected_gpu"] = "auto"
+                return config
             except:
-                return {}
-    return {"username": "", "profiles": {}, "selected_profile": ""}
+                pass
+    return {"username": "", "profiles": {}, "selected_profile": "", "ram": "4G", "selected_gpu": "auto"}
 
+@eel.expose
 def save_config(config_data):
     current = get_config()
     current.update(config_data)
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(current, f)
+    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(current, f, ensure_ascii=False, indent=4)
 
 def launcher_callback():
     return {
@@ -114,10 +121,10 @@ def sync_mods_from_github(repo_url):
                     )
                     threads.append(t)
                     t.start()
-                                
+                                        
         for t in threads:
             t.join()
-                                
+                                        
         for local_file in os.listdir(local_mods_dir):
             if local_file.endswith('.jar') and local_file not in remote_mod_names:
                 eel.log_update({'payload': f"Видалення застарілого моду: {local_file}"})
@@ -230,9 +237,40 @@ def create_profile_github(name, repo_url):
         return {"success": False, "error": str(e)}
 
 @eel.expose
+def get_available_gpus():
+    gpus = []
+    sys_platform = platform.system()
+    try:
+        if sys_platform == "Windows":
+            cmd = "wmic path win32_VideoController get name"
+            output = subprocess.check_output(cmd, shell=True).decode('utf-8', errors='ignore')
+            lines = [line.strip() for line in output.split('\n') if line.strip()]
+            for idx, line in enumerate(lines[1:]):
+                gpus.append({"id": f"win_gpu_{idx}", "name": line})
+        elif sys_platform == "Linux":
+            output = subprocess.check_output("lspci | grep -E 'VGA|3D'", shell=True).decode('utf-8', errors='ignore')
+            for idx, line in enumerate(output.split('\n')):
+                if line.strip():
+                    name = line.split(':', 2)[-1].strip()
+                    gpus.append({"id": f"linux_gpu_{idx}", "name": name})
+        elif sys_platform == "Darwin":
+            gpus.append({"id": "apple_integrated", "name": "Apple Display/Integrated GPU"})
+    except:
+        pass
+    if not gpus:
+        gpus = [
+            {"id": "discrete", "name": "Дискретний адаптер (Висока продуктивність)"},
+            {"id": "integrated", "name": "Інтегрований адаптер (Енергоощадження)"}
+        ]
+    return gpus
+
+@eel.expose
 def launch_game(data):
     mc_ver = data['version']
     loader = data['loader']
+    ram_amount = data.get('ram', '4G')
+    gpu_choice = data.get('gpu', 'auto')
+    
     try:
         config = get_config()
         selected_profile = config.get('selected_profile', '')
@@ -312,12 +350,30 @@ def launch_game(data):
             raise Exception(f"Не вдалося знайти або встановити версію для {loader}")
 
         player_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, data['username']))
-        options = {'username': data['username'], 'uuid': player_uuid, 'token': '0'}
+        
+        options = {
+            'username': data['username'], 
+            'uuid': player_uuid, 
+            'token': '0',
+            'jvmArguments': [f'-Xmx{ram_amount}', f'-Xms{ram_amount}']
+        }
+        
         command = mll.command.get_minecraft_command(version_to_launch, MINECRAFT_PATH, options)
         command.insert(1, "-Dsun.awt.X11.ignore_bad_visuals=1")
         command.insert(2, "-Dglfw.platform=x11")
         
-        process = subprocess.Popen(command, env=os.environ.copy())
+        env_vars = os.environ.copy()
+        if gpu_choice != 'auto':
+            gpus = get_available_gpus()
+            selected_gpu_name = next((g['name'].lower() for g in gpus if g['id'] == gpu_choice), "")
+            if "nvidia" in selected_gpu_name or gpu_choice == "discrete":
+                env_vars["__NV_PRIME_RENDER_OFFLOAD"] = "1"
+                env_vars["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+                command.insert(1, "-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false")
+            elif "amd" in selected_gpu_name or "radeon" in selected_gpu_name or "ati" in selected_gpu_name:
+                env_vars["DRI_PRIME"] = "1"
+
+        process = subprocess.Popen(command, env=env_vars)
         threading.Thread(target=lambda: (process.wait(), eel.game_closed()), daemon=True).start()
         return {"success": True}
     except Exception as e:
@@ -328,7 +384,7 @@ def get_forge_versions(minecraft_version):
     try:
         all_forge = mll.forge.list_forge_versions()
         return [v for v in all_forge if v.startswith(minecraft_version)]
-    except Exception as e:
+    except:
         return []
 
 @eel.expose
@@ -339,7 +395,7 @@ def get_neoforge_versions(minecraft_version):
         if minecraft_version in supported_mc_versions:
             return [minecraft_version]
         return []
-    except Exception as e:
+    except:
         return []
 
 eel.start('index.html', size=(900, 600))

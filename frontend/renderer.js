@@ -17,7 +17,6 @@ const modalOverlay = document.getElementById("modal-overlay");
 const openCreateModalBtn = document.getElementById("open-create-modal-btn");
 const cancelBtn = document.getElementById("cancel-btn");
 const saveBtn = document.getElementById("save-btn");
-
 const modalProfileName = document.getElementById("modal-profile-name");
 const modalVersionSelect = document.getElementById("modal-version-select");
 const modalLoaderSelect = document.getElementById("modal-loader-select");
@@ -25,10 +24,40 @@ const modalRepoUrl = document.getElementById("modal-repo-url");
 const manualFields = document.getElementById("manual-creation-fields");
 const githubFields = document.getElementById("github-creation-fields");
 
+const settingsModalOverlay = document.getElementById("settings-modal-overlay");
+const openSettingsBtn = document.getElementById("open-settings-btn");
+const settingsCloseBtn = document.getElementById("settings-close-btn");
+const ramSelect = document.getElementById("ram-select");
+const gpuSelect = document.getElementById("gpu-select");
+
 let currentProfiles = {};
 
 async function init() {
   usernameInput.value = await eel.load_username()();
+
+  const config = await eel.get_config()();
+  if (config) {
+    if (config.ram) {
+      ramSelect.value = config.ram;
+    }
+    if (config.selected_gpu) {
+      gpuSelect.value = config.selected_gpu;
+    }
+  }
+
+  const gpus = await eel.get_available_gpus()();
+  gpuSelect.innerHTML =
+    '<option value="auto">Автоматично (За замовчуванням)</option>';
+  for (const gpu of gpus) {
+    const opt = document.createElement("option");
+    opt.value = gpu.id;
+    opt.textContent = gpu.name;
+    gpuSelect.appendChild(opt);
+  }
+
+  if (config && config.selected_gpu) {
+    gpuSelect.value = config.selected_gpu;
+  }
 
   const versions = await eel.get_versions()();
   modalVersionSelect.innerHTML =
@@ -133,6 +162,22 @@ cancelBtn.addEventListener("click", () => {
   modalOverlay.classList.add("modal-hidden");
 });
 
+openSettingsBtn.addEventListener("click", () => {
+  settingsModalOverlay.classList.remove("modal-hidden");
+});
+
+settingsCloseBtn.addEventListener("click", () => {
+  settingsModalOverlay.classList.add("modal-hidden");
+});
+
+ramSelect.addEventListener("change", () => {
+  eel.save_config({ ram: ramSelect.value });
+});
+
+gpuSelect.addEventListener("change", () => {
+  eel.save_config({ selected_gpu: gpuSelect.value });
+});
+
 document.getElementsByName("creation-type").forEach((radio) => {
   radio.addEventListener("change", (e) => {
     if (e.target.value === "manual") {
@@ -179,6 +224,7 @@ saveBtn.addEventListener("click", async () => {
 usernameInput.addEventListener("input", () =>
   eel.save_username(usernameInput.value),
 );
+
 document
   .getElementById("open-folder-btn")
   .addEventListener("click", () => eel.open_minecraft_folder());
@@ -201,6 +247,8 @@ btn.addEventListener("click", async () => {
     version: p.minecraft_version,
     username: usernameInput.value,
     loader: p.downloader,
+    ram: ramSelect.value,
+    gpu: gpuSelect.value,
     forge_version: p.downloader === "forge" ? loaderVersionSelect.value : "",
     neoforge_version:
       p.downloader === "neoforge" ? loaderVersionSelect.value : "",

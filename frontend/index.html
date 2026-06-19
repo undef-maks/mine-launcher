@@ -58,9 +58,21 @@
           </div>
         </div>
 
-        <button id="open-folder-btn" style="margin-top: auto">
-          Відкрити папку гри
-        </button>
+        <div
+          class="sidebar-footer"
+          style="margin-top: auto; display: flex; gap: 10px"
+        >
+          <button id="open-folder-btn" style="padding: 10px; font-size: 12px">
+            Папка гри
+          </button>
+          <button
+            id="open-settings-btn"
+            class="secondary-btn"
+            style="padding: 10px; font-size: 12px; flex-shrink: 0; width: auto"
+          >
+            ⚙ Налаштування
+          </button>
+        </div>
       </aside>
 
       <div id="modal-overlay" class="modal-hidden">
@@ -117,9 +129,43 @@
             </p>
           </div>
 
-          <div class="modal-buttons">
+          <div
+            class="modal-buttons"
+            style="display: flex; gap: 10px; margin-top: 20px"
+          >
             <button id="cancel-btn" class="danger-btn">Скасувати</button>
             <button id="save-btn">Зберегти</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="settings-modal-overlay" class="modal-hidden">
+        <div class="modal-box">
+          <h2>Налаштування лаунчера</h2>
+
+          <label class="input-label">Виділена оперативна пам'ять (RAM)</label>
+          <div class="custom-select-wrapper" style="margin-bottom: 20px">
+            <select id="ram-select">
+              <option value="2G">2 ГБ</option>
+              <option value="4G" selected>4 ГБ (Рекомендовано)</option>
+              <option value="6G">6 ГБ</option>
+              <option value="8G">8 ГБ</option>
+              <option value="12G">12 ГБ</option>
+              <option value="16G">16 ГБ</option>
+            </select>
+          </div>
+
+          <label class="input-label">Графічний адаптер (GPU)</label>
+          <div class="custom-select-wrapper" style="margin-bottom: 25px">
+            <select id="gpu-select">
+              <option value="auto" selected>
+                Автоматично (За замовчуванням)
+              </option>
+            </select>
+          </div>
+
+          <div class="modal-buttons" style="display: flex; gap: 10px">
+            <button id="settings-close-btn" style="width: 100%">Закрити</button>
           </div>
         </div>
       </div>
