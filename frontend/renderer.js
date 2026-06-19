@@ -1,87 +1,209 @@
 const btn = document.getElementById("play-btn");
 const status = document.getElementById("status");
-const versionSelect = document.getElementById("version-select");
-const forgeSelect = document.getElementById("forge-select");
-const forgeLabel = document.getElementById("forge-label");
+const logContainer = document.getElementById("log-container");
 const progressBar = document.getElementById("progress-bar");
 const usernameInput = document.getElementById("username");
-const logContainer = document.getElementById("log-container");
+
+const profileSelect = document.getElementById("profile-select");
+const activeProfileInfo = document.getElementById("active-profile-info");
+const infoMcVersion = document.getElementById("info-mc-version");
+const infoLoader = document.getElementById("info-loader");
+const infoRepoContainer = document.getElementById("info-repo-container");
+const infoRepoStatus = document.getElementById("info-repo-status");
+const loaderVersionWrapper = document.getElementById("loader-version-wrapper");
+const loaderVersionSelect = document.getElementById("loader-version-select");
+
+const modalOverlay = document.getElementById("modal-overlay");
+const openCreateModalBtn = document.getElementById("open-create-modal-btn");
+const cancelBtn = document.getElementById("cancel-btn");
+const saveBtn = document.getElementById("save-btn");
+
+const modalProfileName = document.getElementById("modal-profile-name");
+const modalVersionSelect = document.getElementById("modal-version-select");
+const modalLoaderSelect = document.getElementById("modal-loader-select");
+const modalRepoUrl = document.getElementById("modal-repo-url");
+const manualFields = document.getElementById("manual-creation-fields");
+const githubFields = document.getElementById("github-creation-fields");
+
+let currentProfiles = {};
 
 async function init() {
   usernameInput.value = await eel.load_username()();
-  const versions = await eel.get_versions()();
-  versionSelect.innerHTML =
-    '<option value="" disabled selected>Оберіть версію</option>';
 
+  const versions = await eel.get_versions()();
+  modalVersionSelect.innerHTML =
+    '<option value="" disabled selected>Оберіть версію</option>';
   for (const ver of versions) {
-    const isInstalled = await eel.check_installed(ver)();
     const opt = document.createElement("option");
     opt.value = ver;
-    opt.textContent = isInstalled ? `✓ ${ver}` : ver;
-    versionSelect.appendChild(opt);
+    opt.textContent = ver;
+    modalVersionSelect.appendChild(opt);
   }
+
+  await loadProfiles();
 }
 init();
+
+async function loadProfiles() {
+  currentProfiles = await eel.get_profiles()();
+  const selected = await eel.get_selected_profile()();
+
+  profileSelect.innerHTML =
+    '<option value="" disabled selected>Оберіть або створіть збірку</option>';
+
+  for (const name in currentProfiles) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selected) opt.selected = true;
+    profileSelect.appendChild(opt);
+  }
+
+  if (selected && currentProfiles[selected]) {
+    handleProfileChange(selected);
+  } else {
+    activeProfileInfo.style.display = "none";
+  }
+}
+
+async function handleProfileChange(profileName) {
+  const p = currentProfiles[profileName];
+  if (!p) return;
+
+  await eel.set_selected_profile(profileName)();
+
+  infoMcVersion.textContent = p.minecraft_version;
+  infoLoader.textContent = p.downloader.toUpperCase();
+
+  if (p.type === "github") {
+    infoRepoContainer.style.display = "block";
+    infoRepoStatus.textContent = p.version || "Синхронізовано";
+  } else {
+    infoRepoContainer.style.display = "none";
+  }
+
+  activeProfileInfo.style.display = "block";
+
+  if (p.downloader === "forge" || p.downloader === "neoforge") {
+    status.innerText = "Завантаження списку версій завантажувача...";
+    let subVersions = [];
+    if (p.downloader === "forge") {
+      subVersions = await eel.get_forge_versions(p.minecraft_version)();
+    } else {
+      subVersions = await eel.get_neoforge_versions(p.minecraft_version)();
+    }
+
+    loaderVersionSelect.innerHTML =
+      '<option value="" disabled selected>Оберіть версію</option>';
+    if (subVersions.length > 0) {
+      for (const v of subVersions) {
+        let isInstalled =
+          p.downloader === "forge"
+            ? await eel.check_forge_installed(p.minecraft_version, v)()
+            : await eel.check_neoforge_installed(p.minecraft_version, v)();
+
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = isInstalled ? `✓ ${v}` : v;
+        loaderVersionSelect.appendChild(opt);
+      }
+      loaderVersionWrapper.style.display = "block";
+      status.innerText = "Конфігурацію завантажено.";
+    } else {
+      loaderVersionWrapper.style.display = "none";
+      status.innerText = "Лоадери для цієї версії не знайдені.";
+    }
+  } else {
+    loaderVersionWrapper.style.display = "none";
+    status.innerText = "";
+  }
+}
+
+profileSelect.addEventListener("change", (e) => {
+  handleProfileChange(e.target.value);
+});
+
+openCreateModalBtn.addEventListener("click", () => {
+  modalProfileName.value = "";
+  modalRepoUrl.value = "";
+  modalOverlay.classList.remove("modal-hidden");
+});
+
+cancelBtn.addEventListener("click", () => {
+  modalOverlay.classList.add("modal-hidden");
+});
+
+document.getElementsByName("creation-type").forEach((radio) => {
+  radio.addEventListener("change", (e) => {
+    if (e.target.value === "manual") {
+      manualFields.style.display = "block";
+      githubFields.style.display = "none";
+    } else {
+      manualFields.style.display = "none";
+      githubFields.style.display = "block";
+    }
+  });
+});
+
+saveBtn.addEventListener("click", async () => {
+  const name = modalProfileName.value.trim();
+  if (!name) return alert("Вкажіть назву збірки!");
+
+  const type = document.querySelector(
+    'input[name="creation-type"]:checked',
+  ).value;
+  let result;
+
+  if (type === "manual") {
+    const ver = modalVersionSelect.value;
+    const ldr = modalLoaderSelect.value;
+    if (!ver) return alert("Оберіть версію гри!");
+    result = await eel.create_profile_manual(name, ver, ldr)();
+  } else {
+    const url = modalRepoUrl.value.trim();
+    if (!url) return alert("Вкажіть лінк на репозиторій!");
+    status.innerText = "Парсинг settings.json з GitHub...";
+    result = await eel.create_profile_github(name, url)();
+  }
+
+  if (result && result.success) {
+    modalOverlay.classList.add("modal-hidden");
+    await loadProfiles();
+    status.innerText = `Збірку "${name}" успішно створено!`;
+  } else {
+    alert("Помилка: " + (result?.error || "Невідома помилка"));
+    status.innerText = "Помилка створення профілю.";
+  }
+});
 
 usernameInput.addEventListener("input", () =>
   eel.save_username(usernameInput.value),
 );
-
-document.getElementById("open-folder-btn").addEventListener("click", () => {
-  eel.open_minecraft_folder();
-});
-
-async function updateForgeList() {
-  const isForge =
-    document.querySelector('input[name="loader"]:checked').value === "forge";
-  if (isForge && versionSelect.value) {
-    status.innerText = "Завантаження списку Forge...";
-    const fVers = await eel.get_forge_versions(versionSelect.value)();
-
-    forgeSelect.innerHTML =
-      '<option value="" disabled selected>Оберіть Forge</option>';
-    if (fVers.length === 0) {
-      status.innerText = "Для цієї версії Forge не знайдено.";
-      forgeSelect.style.display = "none";
-      forgeLabel.style.display = "none";
-    } else {
-      status.innerText = "Оберіть версію Forge";
-      for (const v of fVers) {
-        const isInstalled = await eel.check_forge_installed(
-          versionSelect.value,
-          v,
-        )();
-        const opt = document.createElement("option");
-        opt.value = v;
-        opt.textContent = isInstalled ? `✓ ${v}` : v;
-        forgeSelect.appendChild(opt);
-      }
-      forgeSelect.style.display = "block";
-      forgeLabel.style.display = "block";
-    }
-  } else {
-    forgeSelect.style.display = "none";
-    forgeLabel.style.display = "none";
-  }
-}
-
-versionSelect.addEventListener("change", updateForgeList);
-
-document.getElementsByName("loader").forEach((radio) => {
-  radio.addEventListener("change", updateForgeList);
-});
+document
+  .getElementById("open-folder-btn")
+  .addEventListener("click", () => eel.open_minecraft_folder());
 
 btn.addEventListener("click", async () => {
-  if (!versionSelect.value) return (status.innerText = "Оберіть версію!");
-  const loader = document.querySelector('input[name="loader"]:checked').value;
-  if (loader === "forge" && !forgeSelect.value)
-    return (status.innerText = "Оберіть версію Forge!");
+  const selected = profileSelect.value;
+  if (!selected || !currentProfiles[selected])
+    return (status.innerText = "Оберіть збірку!");
+
+  const p = currentProfiles[selected];
+
+  if (
+    (p.downloader === "forge" || p.downloader === "neoforge") &&
+    !loaderVersionSelect.value
+  ) {
+    return (status.innerText = "Оберіть версію завантажувача!");
+  }
 
   const data = {
-    version: versionSelect.value,
+    version: p.minecraft_version,
     username: usernameInput.value,
-    loader: loader,
-    forge_version: forgeSelect.value,
+    loader: p.downloader,
+    forge_version: p.downloader === "forge" ? loaderVersionSelect.value : "",
+    neoforge_version:
+      p.downloader === "neoforge" ? loaderVersionSelect.value : "",
   };
 
   btn.disabled = true;
@@ -92,7 +214,7 @@ btn.addEventListener("click", async () => {
     btn.disabled = false;
   } else {
     status.innerText = "Гра запущена!";
-    btn.innerText = "Гра запущена";
+    btn.innerText = "В ГРІ";
   }
 });
 

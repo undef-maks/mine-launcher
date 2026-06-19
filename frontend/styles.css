@@ -2,9 +2,13 @@ body,
 html {
   margin: 0;
   height: 100%;
-  font-family: "Segoe UI", sans-serif;
+  font-family:
+    "Segoe UI",
+    -apple-system,
+    sans-serif;
   background: #0a0a0c;
   color: #fff;
+  overflow: hidden;
 }
 .app-layout {
   display: grid;
@@ -12,15 +16,16 @@ html {
   height: 100vh;
 }
 .sidebar {
-  background: #16161a;
+  background: #121216;
   padding: 30px;
-  border-right: 1px solid #333;
+  border-right: 1px solid #222;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 .main-content {
   padding: 30px;
-  background: #0a0a0c;
+  background: #070709;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -28,177 +33,234 @@ html {
 }
 h1 {
   color: #0ff;
+  margin-top: 0;
   margin-bottom: 30px;
-  font-size: 24px;
+  font-size: 26px;
+  letter-spacing: 2px;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
 }
 .input-label {
   font-size: 11px;
   color: #0ff;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
 }
 input,
 select {
   width: 100%;
   padding: 12px;
   margin-bottom: 20px;
-  background: #1e1e24;
-  border: 1px solid #444;
+  background: #181820;
+  border: 1px solid #333;
   color: white;
-  border-radius: 5px;
+  border-radius: 6px;
   box-sizing: border-box;
+  font-size: 14px;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: #0ff;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.2);
 }
 .custom-select-wrapper {
   position: relative;
+}
+.custom-select-wrapper select {
+  appearance: none;
 }
 .custom-select-wrapper::after {
   content: "▼";
   position: absolute;
   right: 15px;
-  top: 12px;
+  top: 15px;
   pointer-events: none;
   color: #0ff;
   font-size: 10px;
 }
-.loader-container {
+
+/* Інформаційне поле активного профілю */
+.profile-details-box {
+  background: #181820;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #2a2a35;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #aaa;
+}
+.profile-details-box .highlight {
+  color: #0ff;
+  font-weight: bold;
+}
+
+/* Перемикач типу створення в модалці */
+.creation-type-container {
   display: flex;
-  position: relative;
-  background: #1e1e24;
-  padding: 5px;
-  border-radius: 5px;
+  gap: 10px;
   margin-bottom: 20px;
 }
-.loader-container input {
+.creation-type-container label {
+  flex: 1;
+  background: #181820;
+  border: 1px solid #333;
+  padding: 10px;
+  text-align: center;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.3s;
+}
+.creation-type-container input {
   display: none;
 }
-.loader-container label {
-  flex: 1;
-  text-align: center;
-  padding: 10px;
-  cursor: pointer;
-  color: #888;
-  font-size: 12px;
-  z-index: 1;
-  transition: 0.3s;
-}
-.active-line {
-  position: absolute;
-  bottom: 0;
-  height: 2px;
-  background: #0ff;
-  width: 33.33%;
-  transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-#vanilla:checked ~ .active-line {
-  transform: translateX(0%);
-}
-#fabric:checked ~ .active-line {
-  transform: translateX(100%);
-}
-#forge:checked ~ .active-line {
-  transform: translateX(200%);
-}
-#log-container {
-  flex-grow: 1;
-  background: #16161a;
-  padding: 15px;
-  border-radius: 5px;
-  border: 1px solid #333;
-  overflow-y: auto;
-  font-family: monospace;
-  margin-bottom: 20px;
-}
-.log-item {
-  color: #aaa;
-  cursor: pointer;
-  padding: 4px;
-  border-bottom: 1px solid #222;
-  font-size: 12px;
-}
-.log-item.expanded {
+.creation-type-container label:has(input:checked) {
+  border-color: #0ff;
+  background: rgba(0, 255, 255, 0.05);
   color: #0ff;
-  white-space: pre-wrap;
-  background: #222;
 }
-.hero-area {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-bottom: 20px;
-}
+
+/* Кнопки */
 button {
-  padding: 15px;
+  width: 100%;
+  padding: 14px;
   cursor: pointer;
-  background: transparent;
+  background: rgba(0, 255, 255, 0.05);
   color: #0ff;
   border: 1px solid #0ff;
-  border-radius: 5px;
+  border-radius: 6px;
   text-transform: uppercase;
   font-weight: bold;
-  transition: 0.3s;
+  letter-spacing: 1px;
+  transition: all 0.3s;
 }
 button:hover {
   background: #0ff;
   color: #000;
+  box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+}
+.secondary-btn {
+  padding: 10px;
+  font-size: 12px;
+  background: #181820;
+  border-color: #333;
+  color: #ccc;
+}
+.secondary-btn:hover {
+  background: #22222a;
+  color: #fff;
+  border-color: #0ff;
+  box-shadow: none;
+}
+.danger-btn {
+  border-color: #ff4a4a;
+  color: #ff4a4a;
+  background: rgba(255, 74, 74, 0.05);
+}
+.danger-btn:hover {
+  background: #ff4a4a;
+  color: #fff;
+  box-shadow: 0 0 15px rgba(255, 74, 74, 0.4);
+}
+
+/* Логи */
+#log-container {
+  flex-grow: 1;
+  background: #121216;
+  padding: 15px;
+  border-radius: 6px;
+  border: 1px solid #222;
+  overflow-y: auto;
+  font-family: "Consolas", monospace;
+  margin-bottom: 25px;
+}
+.log-item {
+  color: #888;
+  cursor: pointer;
+  padding: 6px;
+  border-bottom: 1px solid #1a1a22;
+  font-size: 12px;
+}
+.log-item:hover {
+  background: #181820;
+  color: #ccc;
+}
+.log-item.expanded {
+  color: #0ff;
+  white-space: pre-wrap;
+  background: #1a1a24;
+}
+.hero-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 #progress-wrapper {
   width: 100%;
-  height: 12px;
-  background: #16161a;
-  border-radius: 6px;
+  height: 8px;
+  background: #121216;
+  border-radius: 4px;
   overflow: hidden;
-  border: 1px solid #333;
+  border: 1px solid #222;
 }
 #progress-bar {
   width: 0%;
   height: 100%;
   background: #0ff;
+  box-shadow: 0 0 8px #0ff;
   transition: width 0.3s ease;
 }
 #status {
-  color: #888;
-  font-size: 14px;
+  color: #aaa;
+  font-size: 13px;
   margin: 0;
 }
-.modal-hidden {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-}
+
+/* Модалка */
 #modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(4, 4, 6, 0.85);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 100;
-  transition: opacity 0.3s ease;
-  opacity: 1;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s;
+}
+.modal-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 .modal-box {
-  background: #16161a;
+  background: #121216;
   padding: 30px;
-  border-radius: 10px;
-  border: 1px solid #0ff;
-  width: 300px;
-  text-align: center;
+  border-radius: 8px;
+  border: 1px solid #333;
+  width: 380px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
-.modal-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 20px;
+.modal-box h2 {
+  margin-top: 0;
+  font-size: 20px;
+  color: #0ff;
+  margin-bottom: 20px;
 }
-.modal-buttons button {
-  flex: 1;
-  padding: 10px;
-}
-
-#open-folder-btn {
-  width: 100%;
-  margin-top: 20px;
+.modal-desc {
   font-size: 12px;
+  color: #666;
+  margin-top: -10px;
+  margin-bottom: 15px;
+  line-height: 1.4;
 }

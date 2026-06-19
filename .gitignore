@@ -2,3 +2,6 @@ package-lock.json
 game_directory/
 minecraft_data/
 logs/
+config.json
+.pg-native/
+.sable/
