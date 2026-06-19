@@ -26,9 +26,11 @@ init();
 usernameInput.addEventListener("input", () =>
   eel.save_username(usernameInput.value),
 );
+
 document.getElementById("open-folder-btn").addEventListener("click", () => {
   eel.open_minecraft_folder();
 });
+
 async function updateForgeList() {
   const isForge =
     document.querySelector('input[name="loader"]:checked').value === "forge";
