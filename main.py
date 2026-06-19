@@ -44,13 +44,31 @@ def download_single_mod(download_url, local_file_path, file_name):
         eel.log_update({'payload': f"Початок завантаження: {file_name}"})
         mod_res = requests.get(download_url, stream=True, timeout=15)
         if mod_res.status_code == 200:
+            expected_size = mod_res.headers.get('content-length')
+            
             with open(local_file_path, 'wb') as f:
                 for chunk in mod_res.iter_content(chunk_size=1048576):
                     if chunk:
                         f.write(chunk)
+            
+            if expected_size is not None:
+                actual_size = os.path.getsize(local_file_path)
+                if actual_size != int(expected_size):
+                    eel.log_update({'payload': f"Помилка: {file_name} завантажився не повністю! Видалення битого файлу..."})
+                    try:
+                        os.remove(local_file_path)
+                    except:
+                        pass
+                    return
+
             eel.log_update({'payload': f"Успішно скачано: {file_name}"})
     except Exception as e:
         eel.log_update({'payload': f"Помилка завантаження {file_name}: {str(e)}"})
+        if os.path.exists(local_file_path):
+            try:
+                os.remove(local_file_path)
+            except:
+                pass
 
 def sync_mods_from_github(repo_url):
     eel.progress_update({'task': "Синхронізація модифікацій..."})
