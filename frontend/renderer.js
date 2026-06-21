@@ -72,28 +72,28 @@ async function init() {
   await loadProfiles();
 }
 init();
+
 async function loadProfiles() {
-    currentProfiles = await eel.get_profiles()();
-    
-    profileSelect.innerHTML = '<option value="" disabled selected>Оберіть або створіть збірку</option>';
+  currentProfiles = await eel.get_profiles()();
+  const selected = await eel.get_selected_profile()();
 
-    const profilesArray = Object.keys(currentProfiles);
-    
-    if (profilesArray.length === 0) {
-        status.innerText = "У вас немає жодної збірки.";
-        activeProfileInfo.style.display = "none";
-        return; // Виходимо, бо немає що показувати
-    }
+  profileSelect.innerHTML =
+    '<option value="" disabled selected>Оберіть або створіть збірку</option>';
 
-    for (const name of profilesArray) {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        profileSelect.appendChild(opt);
-    }
+  for (const name in currentProfiles) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selected) opt.selected = true;
+    profileSelect.appendChild(opt);
+  }
+
+  if (selected && currentProfiles[selected]) {
+    handleProfileChange(selected);
+  } else {
+    activeProfileInfo.style.display = "none";
+  }
 }
-
-const deleteBtn = document.getElementById("delete-profile-btn"); // Саме цей ID ми беремо з вашого HTML
 
 async function handleProfileChange(profileName) {
   const p = currentProfiles[profileName];
@@ -113,60 +113,33 @@ async function handleProfileChange(profileName) {
 
   activeProfileInfo.style.display = "block";
 
-  const downloader = p.downloader ? p.downloader.toLowerCase() : "";
-
-  if (downloader === "forge" || downloader === "neoforge" || downloader === "fabric") {
+  if (p.downloader === "forge" || p.downloader === "neoforge") {
     status.innerText = "Завантаження списку версій завантажувача...";
-    loaderVersionWrapper.style.display = "block"; 
-    loaderVersionSelect.innerHTML = '<option value="" disabled selected>Завантаження...</option>';
-    
     let subVersions = [];
-    try {
-      if (downloader === "forge") {
-        subVersions = await eel.get_forge_versions(p.minecraft_version)();
-      } else if (downloader === "neoforge") {
-        subVersions = await eel.get_neoforge_versions(p.minecraft_version)();
-      } else if (downloader === "fabric") {
-        subVersions = await eel.get_fabric_versions()(); // Fabric версії зазвичай загальні
-      }
-    } catch (err) {
-      console.error("Помилка отримання версій:", err);
+    if (p.downloader === "forge") {
+      subVersions = await eel.get_forge_versions(p.minecraft_version)();
+    } else {
+      subVersions = await eel.get_neoforge_versions(p.minecraft_version)();
     }
 
-    loaderVersionSelect.innerHTML = '<option value="" disabled selected>Оберіть версію</option>';
-    
-    if (subVersions && subVersions.length > 0) {
+    loaderVersionSelect.innerHTML =
+      '<option value="" disabled selected>Оберіть версію</option>';
+    if (subVersions.length > 0) {
       for (const v of subVersions) {
-        let isInstalled = false;
-        try {
-          if (downloader === "forge") {
-            isInstalled = await eel.check_forge_installed(p.minecraft_version, v)();
-          } else if (downloader === "neoforge") {
-            isInstalled = await eel.check_neoforge_installed(p.minecraft_version, v)();
-          } else if (downloader === "fabric") {
-            isInstalled = await eel.check_fabric_installed(p.minecraft_version, v)();
-          }
-        } catch (e) {}
+        let isInstalled =
+          p.downloader === "forge"
+            ? await eel.check_forge_installed(p.minecraft_version, v)()
+            : await eel.check_neoforge_installed(p.minecraft_version, v)();
 
         const opt = document.createElement("option");
         opt.value = v;
         opt.textContent = isInstalled ? `✓ ${v}` : v;
         loaderVersionSelect.appendChild(opt);
       }
-	  if (p.downloader_version) {
-        const optionExists = Array.from(loaderVersionSelect.options).some(opt => opt.value === p.downloader_version);
-        if (optionExists) {
-          loaderVersionSelect.value = p.downloader_version;
-          status.innerText = `Автоматично вибрано: ${p.downloader_version}`;
-        } else {
-          status.innerText = "Конфігурацію завантажено.";
-        }
-      } else {
-        status.innerText = "Конфігурацію завантажено.";
-      }
+      loaderVersionWrapper.style.display = "block";
       status.innerText = "Конфігурацію завантажено.";
     } else {
-      loaderVersionSelect.innerHTML = '<option value="" disabled>Версій не знайдено</option>';
+      loaderVersionWrapper.style.display = "none";
       status.innerText = "Лоадери для цієї версії не знайдені.";
     }
   } else {
@@ -221,21 +194,22 @@ saveBtn.addEventListener("click", async () => {
   const name = modalProfileName.value.trim();
   if (!name) return alert("Вкажіть назву збірки!");
 
-  const type = document.querySelector('input[name="creation-type"]:checked').value;
-  
-  // Формуємо об'єкт для передачі в Python
-  const profileData = {
-    name: name,
-    type: type,
-    version: modalVersionSelect.value,
-    loader: modalLoaderSelect.value,
-    repo_url: modalRepoUrl.value.trim()
-  };
+  const type = document.querySelector(
+    'input[name="creation-type"]:checked',
+  ).value;
+  let result;
 
-  status.innerText = "Збереження...";
-  
-  // Викликаємо єдину функцію Python
-  const result = await eel.create_profile(profileData)();
+  if (type === "manual") {
+    const ver = modalVersionSelect.value;
+    const ldr = modalLoaderSelect.value;
+    if (!ver) return alert("Оберіть версію гри!");
+    result = await eel.create_profile_manual(name, ver, ldr)();
+  } else {
+    const url = modalRepoUrl.value.trim();
+    if (!url) return alert("Вкажіть лінк на репозиторій!");
+    status.innerText = "Парсинг settings.json з GitHub...";
+    result = await eel.create_profile_github(name, url)();
+  }
 
   if (result && result.success) {
     modalOverlay.classList.add("modal-hidden");
@@ -247,20 +221,72 @@ saveBtn.addEventListener("click", async () => {
   }
 });
 
-deleteBtn.addEventListener("click", async () => {
-    const selectedName = profileSelect.value;
-    if (!selectedName) return;
+usernameInput.addEventListener("input", () =>
+  eel.save_username(usernameInput.value),
+);
 
-    if (confirm(`Видалити "${selectedName}"?`)) {
-        const result = await eel.delete_profile(selectedName)();
-        if (result.success) {
-            // 1. Оновлюємо список профілів
-            await loadProfiles(); 
-            
-            // 2. Явно очищуємо UI, бо профіль більше не вибраний
-            activeProfileInfo.style.display = "none";
-            loaderVersionWrapper.style.display = "none";
-            status.innerText = "Збірку видалено.";
-        }
-    }
+document
+  .getElementById("open-folder-btn")
+  .addEventListener("click", () => eel.open_minecraft_folder());
+
+btn.addEventListener("click", async () => {
+  const selected = profileSelect.value;
+  if (!selected || !currentProfiles[selected])
+    return (status.innerText = "Оберіть збірку!");
+
+  const p = currentProfiles[selected];
+
+  if (
+    (p.downloader === "forge" || p.downloader === "neoforge") &&
+    !loaderVersionSelect.value
+  ) {
+    return (status.innerText = "Оберіть версію завантажувача!");
+  }
+
+  const data = {
+    version: p.minecraft_version,
+    username: usernameInput.value,
+    loader: p.downloader,
+    ram: ramSelect.value,
+    gpu: gpuSelect.value,
+    forge_version: p.downloader === "forge" ? loaderVersionSelect.value : "",
+    neoforge_version:
+      p.downloader === "neoforge" ? loaderVersionSelect.value : "",
+  };
+
+  btn.disabled = true;
+  const result = await eel.launch_game(data)();
+
+  if (!result.success) {
+    status.innerText = "Помилка: " + result.error;
+    btn.disabled = false;
+  } else {
+    status.innerText = "Гра запущена!";
+    btn.innerText = "В ГРІ";
+  }
 });
+
+eel.expose(progress_update);
+function progress_update(data) {
+  status.innerText = data.task;
+  const currentWidth = parseInt(progressBar.style.width) || 0;
+  const randomWidth = Math.min(currentWidth + Math.random() * 10, 90);
+  progressBar.style.width = randomWidth + "%";
+}
+
+eel.expose(game_closed);
+function game_closed() {
+  status.innerText = "Гра закрита";
+  btn.innerText = "ГРАТИ";
+  btn.disabled = false;
+  progressBar.style.width = "0%";
+}
+
+eel.expose(log_update);
+function log_update(data) {
+  const logItem = document.createElement("div");
+  logItem.className = "log-item";
+  logItem.textContent = `> ${data.payload}`;
+  logItem.onclick = () => logItem.classList.toggle("expanded");
+  logContainer.prepend(logItem);
+}
