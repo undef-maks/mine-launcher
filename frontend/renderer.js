@@ -113,33 +113,49 @@ async function handleProfileChange(profileName) {
 
   activeProfileInfo.style.display = "block";
 
-  if (p.downloader === "forge" || p.downloader === "neoforge") {
+  const downloader = p.downloader ? p.downloader.toLowerCase() : "";
+
+  if (downloader === "forge" || downloader === "neoforge" || downloader === "fabric") {
     status.innerText = "Завантаження списку версій завантажувача...";
+    loaderVersionWrapper.style.display = "block"; 
+    loaderVersionSelect.innerHTML = '<option value="" disabled selected>Завантаження...</option>';
+    
     let subVersions = [];
-    if (p.downloader === "forge") {
-      subVersions = await eel.get_forge_versions(p.minecraft_version)();
-    } else {
-      subVersions = await eel.get_neoforge_versions(p.minecraft_version)();
+    try {
+      if (downloader === "forge") {
+        subVersions = await eel.get_forge_versions(p.minecraft_version)();
+      } else if (downloader === "neoforge") {
+        subVersions = await eel.get_neoforge_versions(p.minecraft_version)();
+      } else if (downloader === "fabric") {
+        subVersions = await eel.get_fabric_versions()(); // Fabric версії зазвичай загальні
+      }
+    } catch (err) {
+      console.error("Помилка отримання версій:", err);
     }
 
-    loaderVersionSelect.innerHTML =
-      '<option value="" disabled selected>Оберіть версію</option>';
-    if (subVersions.length > 0) {
+    loaderVersionSelect.innerHTML = '<option value="" disabled selected>Оберіть версію</option>';
+    
+    if (subVersions && subVersions.length > 0) {
       for (const v of subVersions) {
-        let isInstalled =
-          p.downloader === "forge"
-            ? await eel.check_forge_installed(p.minecraft_version, v)()
-            : await eel.check_neoforge_installed(p.minecraft_version, v)();
+        let isInstalled = false;
+        try {
+          if (downloader === "forge") {
+            isInstalled = await eel.check_forge_installed(p.minecraft_version, v)();
+          } else if (downloader === "neoforge") {
+            isInstalled = await eel.check_neoforge_installed(p.minecraft_version, v)();
+          } else if (downloader === "fabric") {
+            isInstalled = await eel.check_fabric_installed(p.minecraft_version, v)();
+          }
+        } catch (e) {}
 
         const opt = document.createElement("option");
         opt.value = v;
         opt.textContent = isInstalled ? `✓ ${v}` : v;
         loaderVersionSelect.appendChild(opt);
       }
-      loaderVersionWrapper.style.display = "block";
       status.innerText = "Конфігурацію завантажено.";
     } else {
-      loaderVersionWrapper.style.display = "none";
+      loaderVersionSelect.innerHTML = '<option value="" disabled>Версій не знайдено</option>';
       status.innerText = "Лоадери для цієї версії не знайдені.";
     }
   } else {
@@ -237,7 +253,7 @@ btn.addEventListener("click", async () => {
   const p = currentProfiles[selected];
 
   if (
-    (p.downloader === "forge" || p.downloader === "neoforge") &&
+    (p.downloader === "forge" || p.downloader === "neoforge" || p.downloader === "fabric") &&
     !loaderVersionSelect.value
   ) {
     return (status.innerText = "Оберіть версію завантажувача!");
@@ -249,9 +265,8 @@ btn.addEventListener("click", async () => {
     loader: p.downloader,
     ram: ramSelect.value,
     gpu: gpuSelect.value,
-    forge_version: p.downloader === "forge" ? loaderVersionSelect.value : "",
-    neoforge_version:
-      p.downloader === "neoforge" ? loaderVersionSelect.value : "",
+    // Просто передаємо вибране значення для будь-якого модлоадера
+    loader_version: loaderVersionSelect.value 
   };
 
   btn.disabled = true;
@@ -289,4 +304,32 @@ function log_update(data) {
   logItem.textContent = `> ${data.payload}`;
   logItem.onclick = () => logItem.classList.toggle("expanded");
   logContainer.prepend(logItem);
+}
+
+const deleteBtn = document.getElementById("delete-profile-btn");
+if (deleteBtn) {
+  deleteBtn.addEventListener("click", async () => {
+    const profileSelect = document.getElementById("profile-select");
+    const selectedProfile = profileSelect.value;
+
+    if (!selectedProfile || selectedProfile === "") {
+      alert("Будь ласка, спочатку оберіть збірку, яку бажаєте видалити.");
+      return;
+    }
+
+    const confirmed = confirm(`Ви дійсно хочете видалити збірку "${selectedProfile}"?`);
+    
+    if (confirmed) {
+      try {
+        const result = await eel.delete_profile(selectedProfile)();
+        if (result && result.success) {
+          window.location.reload();
+        } else {
+          alert("Помилка при видаленні: " + (result ? result.error : "Невідома помилка"));
+        }
+      } catch (err) {
+        alert("Помилка виконання команди видалення: " + err);
+      }
+    }
+  });
 }

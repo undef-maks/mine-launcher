@@ -14,19 +14,27 @@
         <label class="input-label">Нікнейм</label>
         <input type="text" id="username" placeholder="Введіть нік..." />
 
-        <label class="input-label">Ваші збірки / Профілі</label>
-        <div class="custom-select-wrapper">
-          <select id="profile-select">
-            <option value="" disabled selected>
-              Оберіть або створіть збірку
-            </option>
-          </select>
+       <label class="input-label">Ваші збірки / Профілі</label>
+        <div style="display: flex; gap: 8px; align-items: stretch; margin-bottom: 20px; width: 100%;">
+          <div class="custom-select-wrapper" style="flex: 1; margin-bottom: 0;">
+            <select id="profile-select" style="width: 100%; height: 100%;">
+              <option value="" disabled selected>
+                Оберіть або створить збірку
+              </option>
+            </select>
+          </div>
+          <button id="delete-profile-btn" title="Видалити збірку" 
+                  style="background: #ff4d4d; color: white; border: none; border-radius: 6px; width: 40px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: background 0.2s; padding: 0; flex-shrink: 0;"
+                  onmouseover="this.style.background='#e03e3e'" 
+                  onmouseout="this.style.background='#ff4d4d'">
+            🗑️
+          </button>
         </div>
 
         <button
           id="open-create-modal-btn"
           class="secondary-btn"
-          style="margin-bottom: 20px"
+          style="margin-bottom: 20px; width: 100%;"
         >
           + Створити збірку
         </button>

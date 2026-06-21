@@ -7,6 +7,7 @@ import json
 import uuid
 import platform 
 import requests
+import xml.etree.ElementTree as ET
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MINECRAFT_PATH = os.path.join(BASE_DIR, 'minecraft_data')
@@ -157,8 +158,17 @@ def open_minecraft_folder():
 
 @eel.expose
 def get_versions():
-    versions = mll.utils.get_version_list()
-    return [v['id'] for v in versions if v['type'] == 'release']
+    # Отримуємо всі доступні версії
+    all_versions = mll.utils.get_version_list()
+    
+    # Фільтруємо: залишаємо лише ті, які мають тип 'release' 
+    # і не містять дефісів (якщо ви хочете тільки чисті цифрові версії)
+    stable_versions = [
+        v["id"] for v in all_versions 
+        if v["type"] == "release" and "-" not in v["id"]
+    ]
+    
+    return stable_versions
 
 @eel.expose
 def get_profiles():
@@ -191,8 +201,16 @@ def check_neoforge_installed(version, neoforge_version):
     if not os.path.exists(versions_path): return False
     for folder in os.listdir(versions_path):
         if "neoforge" in folder.lower() and version in folder:
-            return True
+            if neoforge_version and neoforge_version in folder:
+                return True
     return False
+
+@eel.expose
+def check_fabric_installed(version, fabric_version):
+    try:
+        return mll.fabric.is_fabric_installed(version, MINECRAFT_PATH, fabric_version)
+    except:
+        return False
 
 @eel.expose
 def create_profile_manual(name, mc_version, loader):
@@ -266,117 +284,62 @@ def get_available_gpus():
 
 @eel.expose
 def launch_game(data):
-    mc_ver = data['version']
-    loader = data['loader']
-    ram_amount = data.get('ram', '4G')
-    gpu_choice = data.get('gpu', 'auto')
-    
     try:
-        config = get_config()
-        selected_profile = config.get('selected_profile', '')
-        profiles = config.get('profiles', {})
+        mc_ver = data.get('version')
+        loader = data.get('loader')
+        ram_amount = data.get('ram', '4G')
+        username = data.get('username')
+        loader_version = data.get('loader_version') # Те, що приходить з фронтенду
         
-        if selected_profile in profiles:
-            profile_data = profiles[selected_profile]
-            if profile_data.get('type') == 'github':
-                repo_url = profile_data.get('repo_url')
-                
-                raw_url = repo_url.replace("github.com", "raw.githubusercontent.com").strip('/')
-                if not raw_url.endswith("/main") and not raw_url.endswith("/master"):
-                    raw_url += "/main"
-                settings_url = f"{raw_url}/settings.json"
-                
-                try:
-                    res = requests.get(settings_url, timeout=5)
-                    if res.status_code == 200:
-                        remote_data = res.json()
-                        remote_version = remote_data.get('version', '1.0.0')
-                        if remote_version != profile_data.get('version'):
-                            eel.log_update({'payload': f"Знайдено нову версію збірки: {remote_version}. Оновлення..."})
-                            profiles[selected_profile]['version'] = remote_version
-                            profiles[selected_profile]['minecraft_version'] = remote_data.get('minecraft_version', mc_ver)
-                            profiles[selected_profile]['downloader'] = remote_data.get('downloader', loader)
-                            save_config({'profiles': profiles})
-                            mc_ver = remote_data.get('minecraft_version', mc_ver)
-                            loader = remote_data.get('downloader', loader)
-                except:
-                    pass
-
-                sync_mods_from_github(repo_url)
-
         versions_path = os.path.join(MINECRAFT_PATH, 'versions')
-        version_to_launch = None
         callbacks = launcher_callback()
+        
+        # 1. Забезпечуємо наявність базової версії
+        if not os.path.exists(os.path.join(versions_path, mc_ver)):
+            eel.progress_update({'task': f"Завантаження {mc_ver}..."})
+            mll.install.install_minecraft_version(mc_ver, MINECRAFT_PATH, callback=callbacks)
 
-        if loader == "forge":
-            forge_ver = data.get('forge_version') or mll.forge.list_forge_versions()[0]
+        # 2. Визначаємо версію для запуску
+        version_to_launch = mc_ver # За замовчуванням ваніла
+        
+        if loader == "fabric":
+            # Якщо версія лоадера не вибрана, беремо останню
+            lv = loader_version if loader_version else mll.fabric.get_latest_loader_version()
+            expected = f"fabric-loader-{lv}-{mc_ver}"
+            
+            # Якщо папки немає, встановлюємо
+            if not os.path.exists(os.path.join(versions_path, expected)):
+                eel.progress_update({'task': "Встановлення Fabric..."})
+                mll.fabric.install_fabric(mc_ver, MINECRAFT_PATH, loader_version=lv, callback=callbacks)
+            version_to_launch = expected
+
+        elif loader == "forge":
+            # Для Forge логіка простіша, але перевіряємо чи є папка
             for folder in os.listdir(versions_path):
-                if mc_ver in folder and forge_ver.split('.')[-1] in folder:
+                if mc_ver in folder and "forge" in folder.lower():
                     version_to_launch = folder
                     break
-            if not version_to_launch:
-                eel.progress_update({'task': "Встановлення Forge..."})
-                mll.forge.install_forge_version(forge_ver, MINECRAFT_PATH, callback=callbacks)
-                for folder in os.listdir(versions_path):
-                    if mc_ver in folder and forge_ver.split('.')[-1] in folder:
-                        version_to_launch = folder
-                        break
-            else:
-                eel.progress_update({'task': "Запуск гри..."})
-
-        elif loader == "neoforge":
-            if not os.path.exists(versions_path):
-                os.makedirs(versions_path)
-            for folder in os.listdir(versions_path):
-                if "neoforge" in folder.lower() and mc_ver in folder:
-                    version_to_launch = folder
-                    break
-            if not version_to_launch:
-                eel.progress_update({'task': f"Встановлення NeoForge для {mc_ver}..."})
-                if not os.path.exists(os.path.join(MINECRAFT_PATH, 'versions', mc_ver)):
-                    mll.install.install_minecraft_version(mc_ver, MINECRAFT_PATH, callback=callbacks)
-                neoforge_manager = mll.mod_loader.get_mod_loader("neoforge")
-                version_to_launch = neoforge_manager.install(mc_ver, MINECRAFT_PATH, callback=callbacks)
-            else:
-                eel.progress_update({'task': "Запуск гри..."})
-
-        else:
-            if not os.path.exists(os.path.join(MINECRAFT_PATH, 'versions', mc_ver)):
-                eel.progress_update({'task': "Завантаження гри..."})
-                mll.install.install_minecraft_version(mc_ver, MINECRAFT_PATH, callback=callbacks)
-            version_to_launch = mc_ver
         
-        if not version_to_launch:
-            raise Exception(f"Не вдалося знайти або встановити версію для {loader}")
-
-        player_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, data['username']))
-        
+        # 3. Формуємо команду
         options = {
-            'username': data['username'], 
-            'uuid': player_uuid, 
+            'username': username,
+            'uuid': str(uuid.uuid5(uuid.NAMESPACE_DNS, username)),
             'token': '0',
             'jvmArguments': [f'-Xmx{ram_amount}', f'-Xms{ram_amount}']
         }
         
+        # Генеруємо команду
         command = mll.command.get_minecraft_command(version_to_launch, MINECRAFT_PATH, options)
-        command.insert(1, "-Dsun.awt.X11.ignore_bad_visuals=1")
-        command.insert(2, "-Dglfw.platform=x11")
         
-        env_vars = os.environ.copy()
-        if gpu_choice != 'auto':
-            gpus = get_available_gpus()
-            selected_gpu_name = next((g['name'].lower() for g in gpus if g['id'] == gpu_choice), "")
-            if "nvidia" in selected_gpu_name or gpu_choice == "discrete":
-                env_vars["__NV_PRIME_RENDER_OFFLOAD"] = "1"
-                env_vars["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
-                command.insert(1, "-Dorg.lwjgl.opengl.Display.allowSoftwareOpenGL=false")
-            elif "amd" in selected_gpu_name or "radeon" in selected_gpu_name or "ati" in selected_gpu_name:
-                env_vars["DRI_PRIME"] = "1"
-
-        process = subprocess.Popen(command, env=env_vars)
+        # Запуск процесу (без зайвих insert, які можуть ламати Windows)
+        process = subprocess.Popen(command)
         threading.Thread(target=lambda: (process.wait(), eel.game_closed()), daemon=True).start()
+        
         return {"success": True}
+
     except Exception as e:
+        # Виводимо помилку в консоль, щоб ви бачили, що саме сталось
+        print(f"ПОМИЛКА ЗАПУСКУ: {str(e)}")
         return {"success": False, "error": str(e)}
 
 @eel.expose
@@ -388,14 +351,56 @@ def get_forge_versions(minecraft_version):
         return []
 
 @eel.expose
+def get_fabric_versions():
+    try:
+        # Правильна функція бібліотеки, яка повертає список словників
+        versions = mll.fabric.get_all_loader_versions()
+        # Витягуємо лише номери версій (наприклад, "0.15.11")
+        return [v['version'] for v in versions]
+    except Exception as e:
+        print(f"Помилка отримання версій Fabric: {e}")
+        return []
+
+
+
+@eel.expose
+def delete_profile(name):
+    config = get_config()
+    profiles = config.get('profiles', {})
+    if name in profiles:
+        del profiles[name]
+        if config.get('selected_profile') == name:
+            config['selected_profile'] = ''
+        save_config({'profiles': profiles, 'selected_profile': config['selected_profile']})
+        return {"success": True}
+    return {"success": False, "error": "Профіль не знайдено"}
+
+@eel.expose
 def get_neoforge_versions(minecraft_version):
     try:
-        neoforge_manager = mll.mod_loader.get_mod_loader("neoforge")
-        supported_mc_versions = neoforge_manager.get_minecraft_versions(True)
-        if minecraft_version in supported_mc_versions:
-            return [minecraft_version]
-        return []
-    except:
+        url = "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return []
+            
+        root = ET.fromstring(response.content)
+        all_versions = [v.text for v in root.findall(".//version")]
+        
+        parts = minecraft_version.split('.')
+        if minecraft_version == "1.20.1":
+            prefix = "47.1."
+        elif len(parts) == 2:
+            prefix = f"{parts[1]}.0."
+        elif len(parts) >= 3:
+            prefix = f"{parts[1]}.{parts[2]}."
+        else:
+            return []
+            
+        filtered_versions = [v for v in all_versions if v.startswith(prefix)]
+        filtered_versions.sort(key=lambda s: [int(u) for u in s.split('.') if u.isdigit()], reverse=True)
+        return filtered_versions
+    except Exception as e:
+        print(f"Помилка отримання версій NeoForge з Maven: {e}")
         return []
 
 eel.start('index.html', size=(900, 600))
