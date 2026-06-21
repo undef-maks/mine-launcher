@@ -72,28 +72,28 @@ async function init() {
   await loadProfiles();
 }
 init();
-
 async function loadProfiles() {
-  currentProfiles = await eel.get_profiles()();
-  const selected = await eel.get_selected_profile()();
+    currentProfiles = await eel.get_profiles()();
+    
+    profileSelect.innerHTML = '<option value="" disabled selected>Оберіть або створіть збірку</option>';
 
-  profileSelect.innerHTML =
-    '<option value="" disabled selected>Оберіть або створіть збірку</option>';
+    const profilesArray = Object.keys(currentProfiles);
+    
+    if (profilesArray.length === 0) {
+        status.innerText = "У вас немає жодної збірки.";
+        activeProfileInfo.style.display = "none";
+        return; // Виходимо, бо немає що показувати
+    }
 
-  for (const name in currentProfiles) {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    if (name === selected) opt.selected = true;
-    profileSelect.appendChild(opt);
-  }
-
-  if (selected && currentProfiles[selected]) {
-    handleProfileChange(selected);
-  } else {
-    activeProfileInfo.style.display = "none";
-  }
+    for (const name of profilesArray) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        profileSelect.appendChild(opt);
+    }
 }
+
+const deleteBtn = document.getElementById("delete-profile-btn"); // Саме цей ID ми беремо з вашого HTML
 
 async function handleProfileChange(profileName) {
   const p = currentProfiles[profileName];
@@ -153,6 +153,17 @@ async function handleProfileChange(profileName) {
         opt.textContent = isInstalled ? `✓ ${v}` : v;
         loaderVersionSelect.appendChild(opt);
       }
+	  if (p.downloader_version) {
+        const optionExists = Array.from(loaderVersionSelect.options).some(opt => opt.value === p.downloader_version);
+        if (optionExists) {
+          loaderVersionSelect.value = p.downloader_version;
+          status.innerText = `Автоматично вибрано: ${p.downloader_version}`;
+        } else {
+          status.innerText = "Конфігурацію завантажено.";
+        }
+      } else {
+        status.innerText = "Конфігурацію завантажено.";
+      }
       status.innerText = "Конфігурацію завантажено.";
     } else {
       loaderVersionSelect.innerHTML = '<option value="" disabled>Версій не знайдено</option>';
@@ -210,22 +221,21 @@ saveBtn.addEventListener("click", async () => {
   const name = modalProfileName.value.trim();
   if (!name) return alert("Вкажіть назву збірки!");
 
-  const type = document.querySelector(
-    'input[name="creation-type"]:checked',
-  ).value;
-  let result;
+  const type = document.querySelector('input[name="creation-type"]:checked').value;
+  
+  // Формуємо об'єкт для передачі в Python
+  const profileData = {
+    name: name,
+    type: type,
+    version: modalVersionSelect.value,
+    loader: modalLoaderSelect.value,
+    repo_url: modalRepoUrl.value.trim()
+  };
 
-  if (type === "manual") {
-    const ver = modalVersionSelect.value;
-    const ldr = modalLoaderSelect.value;
-    if (!ver) return alert("Оберіть версію гри!");
-    result = await eel.create_profile_manual(name, ver, ldr)();
-  } else {
-    const url = modalRepoUrl.value.trim();
-    if (!url) return alert("Вкажіть лінк на репозиторій!");
-    status.innerText = "Парсинг settings.json з GitHub...";
-    result = await eel.create_profile_github(name, url)();
-  }
+  status.innerText = "Збереження...";
+  
+  // Викликаємо єдину функцію Python
+  const result = await eel.create_profile(profileData)();
 
   if (result && result.success) {
     modalOverlay.classList.add("modal-hidden");
@@ -237,99 +247,20 @@ saveBtn.addEventListener("click", async () => {
   }
 });
 
-usernameInput.addEventListener("input", () =>
-  eel.save_username(usernameInput.value),
-);
+deleteBtn.addEventListener("click", async () => {
+    const selectedName = profileSelect.value;
+    if (!selectedName) return;
 
-document
-  .getElementById("open-folder-btn")
-  .addEventListener("click", () => eel.open_minecraft_folder());
-
-btn.addEventListener("click", async () => {
-  const selected = profileSelect.value;
-  if (!selected || !currentProfiles[selected])
-    return (status.innerText = "Оберіть збірку!");
-
-  const p = currentProfiles[selected];
-
-  if (
-    (p.downloader === "forge" || p.downloader === "neoforge" || p.downloader === "fabric") &&
-    !loaderVersionSelect.value
-  ) {
-    return (status.innerText = "Оберіть версію завантажувача!");
-  }
-
-  const data = {
-    version: p.minecraft_version,
-    username: usernameInput.value,
-    loader: p.downloader,
-    ram: ramSelect.value,
-    gpu: gpuSelect.value,
-    // Просто передаємо вибране значення для будь-якого модлоадера
-    loader_version: loaderVersionSelect.value 
-  };
-
-  btn.disabled = true;
-  const result = await eel.launch_game(data)();
-
-  if (!result.success) {
-    status.innerText = "Помилка: " + result.error;
-    btn.disabled = false;
-  } else {
-    status.innerText = "Гра запущена!";
-    btn.innerText = "В ГРІ";
-  }
-});
-
-eel.expose(progress_update);
-function progress_update(data) {
-  status.innerText = data.task;
-  const currentWidth = parseInt(progressBar.style.width) || 0;
-  const randomWidth = Math.min(currentWidth + Math.random() * 10, 90);
-  progressBar.style.width = randomWidth + "%";
-}
-
-eel.expose(game_closed);
-function game_closed() {
-  status.innerText = "Гра закрита";
-  btn.innerText = "ГРАТИ";
-  btn.disabled = false;
-  progressBar.style.width = "0%";
-}
-
-eel.expose(log_update);
-function log_update(data) {
-  const logItem = document.createElement("div");
-  logItem.className = "log-item";
-  logItem.textContent = `> ${data.payload}`;
-  logItem.onclick = () => logItem.classList.toggle("expanded");
-  logContainer.prepend(logItem);
-}
-
-const deleteBtn = document.getElementById("delete-profile-btn");
-if (deleteBtn) {
-  deleteBtn.addEventListener("click", async () => {
-    const profileSelect = document.getElementById("profile-select");
-    const selectedProfile = profileSelect.value;
-
-    if (!selectedProfile || selectedProfile === "") {
-      alert("Будь ласка, спочатку оберіть збірку, яку бажаєте видалити.");
-      return;
-    }
-
-    const confirmed = confirm(`Ви дійсно хочете видалити збірку "${selectedProfile}"?`);
-    
-    if (confirmed) {
-      try {
-        const result = await eel.delete_profile(selectedProfile)();
-        if (result && result.success) {
-          window.location.reload();
-        } else {
-          alert("Помилка при видаленні: " + (result ? result.error : "Невідома помилка"));
+    if (confirm(`Видалити "${selectedName}"?`)) {
+        const result = await eel.delete_profile(selectedName)();
+        if (result.success) {
+            // 1. Оновлюємо список профілів
+            await loadProfiles(); 
+            
+            // 2. Явно очищуємо UI, бо профіль більше не вибраний
+            activeProfileInfo.style.display = "none";
+            loaderVersionWrapper.style.display = "none";
+            status.innerText = "Збірку видалено.";
         }
-      } catch (err) {
-        alert("Помилка виконання команди видалення: " + err);
-      }
     }
-  });
-}
+});

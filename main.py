@@ -211,6 +211,8 @@ def check_fabric_installed(version, fabric_version):
         return mll.fabric.is_fabric_installed(version, MINECRAFT_PATH, fabric_version)
     except:
         return False
+        
+       
 
 @eel.expose
 def create_profile_manual(name, mc_version, loader):
@@ -232,6 +234,9 @@ def create_profile_github(name, repo_url):
     settings_url = f"{raw_url}/settings.json"
     try:
         res = requests.get(settings_url, timeout=5)
+        print(f"[DEBUG] URL: {settings_url}")
+        print(f"[DEBUG] Response text: {res.text}") # Це виведе текст у консоль CMD
+        
         if res.status_code == 200:
             data = res.json()
             mc_version = data.get('minecraft_version')
@@ -246,14 +251,23 @@ def create_profile_github(name, repo_url):
                 "repo_url": repo_url,
                 "minecraft_version": mc_version,
                 "downloader": downloader,
-                "version": version
+                "version": version,
+                "downloader_version": data.get('downloader_version')
             }
             save_config({'profiles': profiles, 'selected_profile': name})
             return {"success": True}
         return {"success": False, "error": f"Файл settings.json не знайдено (Код: {res.status_code})"}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
+        
+@eel.expose
+def create_profile(data):
+    # data — це об'єкт, який приходить із JS
+    if data.get('type') == 'github':
+        return create_profile_github(data['name'], data['repo_url'])
+    else:
+        return create_profile_manual(data['name'], data['version'], data['loader'])
+     
 @eel.expose
 def get_available_gpus():
     gpus = []
@@ -285,61 +299,56 @@ def get_available_gpus():
 @eel.expose
 def launch_game(data):
     try:
+        print(f"[DEBUG] Вхідні дані: {data}") # Це виведеться у вікні CMD
+        
         mc_ver = data.get('version')
         loader = data.get('loader')
-        ram_amount = data.get('ram', '4G')
-        username = data.get('username')
-        loader_version = data.get('loader_version') # Те, що приходить з фронтенду
+        loader_ver = data.get('loader_version')
+        ram = data.get('ram', '4G')
         
-        versions_path = os.path.join(MINECRAFT_PATH, 'versions')
-        callbacks = launcher_callback()
-        
-        # 1. Забезпечуємо наявність базової версії
-        if not os.path.exists(os.path.join(versions_path, mc_ver)):
-            eel.progress_update({'task': f"Завантаження {mc_ver}..."})
-            mll.install.install_minecraft_version(mc_ver, MINECRAFT_PATH, callback=callbacks)
+        # 1. Перевірка наявності версії
+        if not mc_ver:
+            return {"success": False, "error": "Не вказано версію гри!"}
 
-        # 2. Визначаємо версію для запуску
-        version_to_launch = mc_ver # За замовчуванням ваніла
+        # 2. Логіка вибору версії для запуску
+        version_to_launch = mc_ver
         
-        if loader == "fabric":
-            # Якщо версія лоадера не вибрана, беремо останню
-            lv = loader_version if loader_version else mll.fabric.get_latest_loader_version()
-            expected = f"fabric-loader-{lv}-{mc_ver}"
+        # --- БЕЗПЕЧНИЙ ЛОАДЕР ---
+        if loader and loader != "vanilla":
+            # Тут ми просто перевіряємо, чи існує папка, не намагаючись її створити в момент запуску
+            # Це запобігає "вильотам" під час мережевих запитів
+            possible_folders = [f for f in os.listdir(os.path.join(MINECRAFT_PATH, 'versions')) 
+                               if mc_ver in f and loader in f.lower()]
             
-            # Якщо папки немає, встановлюємо
-            if not os.path.exists(os.path.join(versions_path, expected)):
-                eel.progress_update({'task': "Встановлення Fabric..."})
-                mll.fabric.install_fabric(mc_ver, MINECRAFT_PATH, loader_version=lv, callback=callbacks)
-            version_to_launch = expected
+            if possible_folders:
+                version_to_launch = possible_folders[0]
+            else:
+                return {"success": False, "error": f"Версія {loader} для {mc_ver} не встановлена!"}
 
-        elif loader == "forge":
-            # Для Forge логіка простіша, але перевіряємо чи є папка
-            for folder in os.listdir(versions_path):
-                if mc_ver in folder and "forge" in folder.lower():
-                    version_to_launch = folder
-                    break
-        
-        # 3. Формуємо команду
+        # 3. Формування команди
         options = {
-            'username': username,
-            'uuid': str(uuid.uuid5(uuid.NAMESPACE_DNS, username)),
+            'username': data.get('username', 'Player'),
+            'uuid': str(uuid.uuid4()),
             'token': '0',
-            'jvmArguments': [f'-Xmx{ram_amount}', f'-Xms{ram_amount}']
+            'jvmArguments': [f'-Xmx{ram}', f'-Xms{ram}']
         }
         
-        # Генеруємо команду
         command = mll.command.get_minecraft_command(version_to_launch, MINECRAFT_PATH, options)
         
-        # Запуск процесу (без зайвих insert, які можуть ламати Windows)
-        process = subprocess.Popen(command)
-        threading.Thread(target=lambda: (process.wait(), eel.game_closed()), daemon=True).start()
-        
+        # 4. Запуск (обов'язково в окремому потоці, щоб не блокувати Eel)
+        def run_proc():
+            try:
+                proc = subprocess.Popen(command)
+                proc.wait()
+                eel.game_closed()()
+            except Exception as e:
+                print(f"[Критично] Помилка процесу: {e}")
+
+        threading.Thread(target=run_proc, daemon=True).start()
         return {"success": True}
 
     except Exception as e:
-        # Виводимо помилку в консоль, щоб ви бачили, що саме сталось
-        print(f"ПОМИЛКА ЗАПУСКУ: {str(e)}")
+        print(f"[Критично] Помилка launch_game: {str(e)}")
         return {"success": False, "error": str(e)}
 
 @eel.expose
